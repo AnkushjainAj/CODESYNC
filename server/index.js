@@ -13,12 +13,12 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// ✅ Health Check Route
+// ✅ Health Check
 app.get("/", (req, res) => {
   res.status(200).send("🚀 CodeSync Server is running smoothly!");
 });
 
-// ✅ Language Config
+// ✅ JDoodle Languages
 const languageConfig = {
   python3: { versionIndex: "3" },
   java: { versionIndex: "3" },
@@ -28,10 +28,9 @@ const languageConfig = {
   javascript: { versionIndex: "3" },
 };
 
-// ✅ JDoodle Compile API
+// ✅ Compile Route
 app.post("/compile", async (req, res) => {
   const { code, language } = req.body;
-
   if (!languageConfig[language]) {
     return res.status(400).json({ error: "Unsupported language" });
   }
@@ -54,13 +53,12 @@ app.post("/compile", async (req, res) => {
   }
 });
 
-// ✅ Socket.io Setup
+// ✅ Socket.io
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 const userSocketMap = {};
-
 const getAllConnectedClients = (roomId) => {
   return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map((socketId) => ({
     socketId,
