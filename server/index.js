@@ -1,18 +1,22 @@
 const express = require("express");
-const app = express();
 const http = require("http");
-const { Server } = require("socket.io");
 const cors = require("cors");
 const axios = require("axios");
+const { Server } = require("socket.io");
 const ACTIONS = require("./Actions");
-
 require("dotenv").config();
 
+const app = express();
 const server = http.createServer(app);
 
-// ✅ Middleware
+// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
+
+// ✅ Health Check Route
+app.get("/", (req, res) => {
+  res.status(200).send("🚀 CodeSync Server is running smoothly!");
+});
 
 // ✅ Language Config
 const languageConfig = {
@@ -24,7 +28,7 @@ const languageConfig = {
   javascript: { versionIndex: "3" },
 };
 
-// ✅ JDoodle Compile Route
+// ✅ JDoodle Compile API
 app.post("/compile", async (req, res) => {
   const { code, language } = req.body;
 
@@ -45,14 +49,14 @@ app.post("/compile", async (req, res) => {
 
     res.json(response.data);
   } catch (err) {
-    console.error(err.response?.data || err.message);
+    console.error("Compile error:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to compile code" });
   }
 });
 
 // ✅ Socket.io Setup
 const io = new Server(server, {
-  cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 const userSocketMap = {};
@@ -84,7 +88,6 @@ io.on("connection", (socket) => {
     io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
   });
 
-  // ✅ New Event: BOT_TOGGLE
   socket.on(ACTIONS.BOT_TOGGLE, ({ roomId, isBotOpen }) => {
     socket.in(roomId).emit(ACTIONS.BOT_TOGGLE, { isBotOpen });
   });
@@ -101,6 +104,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ Server Start
+// ✅ Start Server
 const PORT = process.env.PORT || 5001;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

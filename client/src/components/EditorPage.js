@@ -168,7 +168,7 @@ function EditorPage() {
           <div className="flex-grow-1 overflow-auto">
             <div className="d-flex justify-content-between align-items-center mb-2">
               <strong style={{ color: "#bbb" }}>Members:</strong>
-              <span style={{ color: "#00ffcc", fontSize: "14px", fontWeight: "500" }}>
+              <span style={{ color: "#00ffcc", fontSize: "14px", fontWeight: "500" }}> Participants :
                 {clients.length}
               </span>
             </div>
