@@ -4,7 +4,13 @@ import CodeMirror from "codemirror";
 import "codemirror/lib/codemirror.css";
 import "codemirror/theme/dracula.css";
 
+// CodeMirror modes
 import "codemirror/mode/javascript/javascript";
+import "codemirror/mode/python/python";
+import "codemirror/mode/clike/clike";
+import "codemirror/mode/sql/sql";
+
+// Addons
 import "codemirror/addon/edit/closebrackets";
 import "codemirror/addon/edit/matchbrackets";
 import "codemirror/addon/comment/comment";
@@ -12,19 +18,28 @@ import "codemirror/addon/comment/continuecomment";
 
 import { ACTIONS } from "../Actions";
 
-function Editor({ socketRef, roomId, code, onCodeChange }) {
+const LANGUAGE_MODES = {
+  javascript: "javascript",
+  python3: "python",
+  cpp: "text/x-c++src",
+  c: "text/x-csrc",
+  java: "text/x-java",
+  sql: "text/x-sql",
+};
+
+function Editor({ socketRef, roomId, code, onCodeChange, selectedLanguage }) {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     const editor = CodeMirror.fromTextArea(textareaRef.current, {
-      mode: "javascript",  // ✅ JSON hata do
+      mode: LANGUAGE_MODES[selectedLanguage] || "javascript",
       theme: "dracula",
       autoCloseBrackets: true,
       matchBrackets: true,
       lineNumbers: true,
       extraKeys: {
-        "Ctrl-/": "toggleComment",   // ✅ Shortcut added
+        "Ctrl-/": "toggleComment",
         "Cmd-/": "toggleComment",
       },
     });
@@ -33,6 +48,7 @@ function Editor({ socketRef, roomId, code, onCodeChange }) {
     editor.setSize(null, "100%");
     editor.setValue(code);
 
+    // Handle local changes
     editor.on("change", (instance, changes) => {
       const { origin } = changes;
       const updatedCode = instance.getValue();
@@ -47,12 +63,21 @@ function Editor({ socketRef, roomId, code, onCodeChange }) {
     });
   }, []);
 
+  // Update mode when language changes
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.setOption("mode", LANGUAGE_MODES[selectedLanguage] || "javascript");
+    }
+  }, [selectedLanguage]);
+
+  // Update code when external changes come
   useEffect(() => {
     if (editorRef.current && code !== editorRef.current.getValue()) {
       editorRef.current.setValue(code);
     }
   }, [code]);
 
+  // Socket listener
   useEffect(() => {
     if (socketRef.current) {
       socketRef.current.on(ACTIONS.CODE_CHANGE, ({ code }) => {
@@ -61,7 +86,6 @@ function Editor({ socketRef, roomId, code, onCodeChange }) {
         }
       });
     }
-
     return () => {
       socketRef.current?.off(ACTIONS.CODE_CHANGE);
     };
