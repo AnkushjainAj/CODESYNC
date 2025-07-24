@@ -31,6 +31,7 @@ function Editor({ socketRef, roomId, code, onCodeChange, selectedLanguage }) {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // ✅ Initialize CodeMirror only once
   useEffect(() => {
     const editor = CodeMirror.fromTextArea(textareaRef.current, {
       mode: LANGUAGE_MODES[selectedLanguage] || "javascript",
@@ -46,13 +47,13 @@ function Editor({ socketRef, roomId, code, onCodeChange, selectedLanguage }) {
 
     editorRef.current = editor;
     editor.setSize(null, "100%");
-    editor.setValue(code);
+    editor.setValue(code || ""); // Set initial code
 
-    // Handle local changes
+    // ✅ Local changes → Emit to socket
     editor.on("change", (instance, changes) => {
       const { origin } = changes;
       const updatedCode = instance.getValue();
-      onCodeChange(updatedCode);
+      onCodeChange(updatedCode); // Update parent state
 
       if (origin !== "setValue") {
         socketRef.current?.emit(ACTIONS.CODE_CHANGE, {
@@ -61,35 +62,49 @@ function Editor({ socketRef, roomId, code, onCodeChange, selectedLanguage }) {
         });
       }
     });
-  }, []);
+  }, []); // ✅ Runs only once
 
-  // Update mode when language changes
+  // ✅ Update language dynamically without resetting content
   useEffect(() => {
     if (editorRef.current) {
-      editorRef.current.setOption("mode", LANGUAGE_MODES[selectedLanguage] || "javascript");
+      editorRef.current.setOption(
+        "mode",
+        LANGUAGE_MODES[selectedLanguage] || "javascript"
+      );
     }
   }, [selectedLanguage]);
 
-  // Update code when external changes come
+  // ✅ External code updates from parent → Update editor
   useEffect(() => {
-    if (editorRef.current && code !== editorRef.current.getValue()) {
+    if (
+      editorRef.current &&
+      code !== null &&
+      code !== editorRef.current.getValue()
+    ) {
       editorRef.current.setValue(code);
     }
   }, [code]);
 
-  // Socket listener
+  // ✅ Listen for incoming code changes via socket
   useEffect(() => {
-    if (socketRef.current) {
-      socketRef.current.on(ACTIONS.CODE_CHANGE, ({ code }) => {
-        if (code !== null && code !== editorRef.current.getValue()) {
-          editorRef.current.setValue(code);
-        }
-      });
-    }
-    return () => {
-      socketRef.current?.off(ACTIONS.CODE_CHANGE);
+    if (!socketRef.current) return;
+
+    const handleCodeChange = ({ code }) => {
+      if (
+        code !== null &&
+        editorRef.current &&
+        code !== editorRef.current.getValue()
+      ) {
+        editorRef.current.setValue(code);
+      }
     };
-  }, [socketRef]);
+
+    socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+
+    return () => {
+      socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+    };
+  }, [socketRef.current]);
 
   return (
     <div style={{ height: "600px" }}>

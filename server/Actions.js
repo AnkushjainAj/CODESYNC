@@ -8,6 +8,8 @@ const ACTIONS = {
   SYNC_CODE: "sync-code",
   LEAVE: "leave",
     TOGGLE_BOT: "toggle-bot",
+    LANGUAGE_CHANGE: "language-change",
+
 };
 
 module.exports = ACTIONS;

@@ -42,15 +42,15 @@ function EditorPage() {
   const [output, setOutput] = useState("");
   const [isCompileWindowOpen, setIsCompileWindowOpen] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState("python3");
+  const [selectedLanguage, setSelectedLanguage] = useState("python3"); // ✅ Default for first user
   const [code, setCode] = useState(DEFAULT_TEMPLATES["python3"]);
   const [isBotOpen, setIsBotOpen] = useState(false);
-  const codeRef = useRef(code);
 
+  const codeRef = useRef(code);
+  const socketRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { roomId } = useParams();
-  const socketRef = useRef(null);
 
   useEffect(() => {
     codeRef.current = code;
@@ -59,6 +59,7 @@ function EditorPage() {
   useEffect(() => {
     const init = async () => {
       socketRef.current = await initSocket();
+
       socketRef.current.on("connect_error", handleErrors);
       socketRef.current.on("connect_failed", handleErrors);
 
@@ -68,40 +69,55 @@ function EditorPage() {
         navigate("/");
       }
 
+      /** ✅ Handle user join */
+      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, language, code }) => {
+        setClients(clients);
+
+        if (username !== location.state?.username) {
+          toast.success(`${username} joined the room.`);
+        }
+
+        // ✅ If the current user is the new one joining
+        if (socketId === socketRef.current.id) {
+          setSelectedLanguage(language);
+          setCode(code);
+          codeRef.current = code;
+        }
+      });
+
+      /** ✅ Handle language change from others */
+      socketRef.current.on(ACTIONS.LANGUAGE_CHANGE, ({ language, code }) => {
+        setSelectedLanguage(language);
+        setCode(code);
+        codeRef.current = code;
+      });
+
+      /** ✅ Handle disconnect */
+      socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+        toast.success(`${username} left the room`);
+        setClients((prev) => prev.filter((client) => client.socketId !== socketId));
+      });
+
+      // ✅ Join the room
       socketRef.current.emit(ACTIONS.JOIN, {
         roomId,
         username: location.state?.username,
       });
-
-      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
-        if (username !== location.state?.username) {
-          toast.success(`${username} joined the room.`);
-        }
-        setClients(clients);
-        socketRef.current.emit(ACTIONS.SYNC_CODE, {
-          code: codeRef.current,
-          socketId,
-        });
-      });
-
-      socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
-        toast.success(`${username} left the room`);
-        setClients((prev) =>
-          prev.filter((client) => client.socketId !== socketId)
-        );
-      });
     };
+
     init();
 
     return () => {
       socketRef.current?.disconnect();
       socketRef.current?.off(ACTIONS.JOINED);
       socketRef.current?.off(ACTIONS.DISCONNECTED);
+      socketRef.current?.off(ACTIONS.LANGUAGE_CHANGE);
     };
   }, [navigate, location.state, roomId]);
 
   if (!location.state) return <Navigate to="/" />;
 
+  /** ✅ Copy Room ID */
   const copyRoomId = async () => {
     try {
       await navigator.clipboard.writeText(roomId);
@@ -111,8 +127,10 @@ function EditorPage() {
     }
   };
 
+  /** ✅ Leave Room */
   const leaveRoom = () => navigate("/");
 
+  /** ✅ Run code */
   const runCode = async () => {
     setIsCompiling(true);
     try {
@@ -120,7 +138,6 @@ function EditorPage() {
         code: codeRef.current,
         language: selectedLanguage,
       });
-
       setOutput(response.data.output || JSON.stringify(response.data));
     } catch (err) {
       setOutput(err.response?.data?.error || "Error compiling code");
@@ -129,18 +146,18 @@ function EditorPage() {
     }
   };
 
-  const toggleCompileWindow = () => {
-    setIsCompileWindowOpen((prev) => !prev);
-  };
-
+  /** ✅ Handle language change (broadcast) */
   const handleLanguageChange = (e) => {
     const lang = e.target.value;
     const defaultCode = DEFAULT_TEMPLATES[lang] || "";
     setSelectedLanguage(lang);
     setCode(defaultCode);
     codeRef.current = defaultCode;
-    socketRef.current?.emit(ACTIONS.CODE_CHANGE, {
+
+    // ✅ Notify others
+    socketRef.current?.emit(ACTIONS.LANGUAGE_CHANGE, {
       roomId,
+      language: lang,
       code: defaultCode,
     });
   };
@@ -168,8 +185,8 @@ function EditorPage() {
           <div className="flex-grow-1 overflow-auto">
             <div className="d-flex justify-content-between align-items-center mb-2">
               <strong style={{ color: "#bbb" }}>Members:</strong>
-              <span style={{ color: "#00ffcc", fontSize: "14px", fontWeight: "500" }}> Participants :
-                {clients.length}
+              <span style={{ color: "#00ffcc", fontSize: "14px", fontWeight: "500" }}>
+                Participants: {clients.length}
               </span>
             </div>
 
@@ -211,7 +228,7 @@ function EditorPage() {
           </div>
         </div>
 
-        {/* Editor Area */}
+        {/* Editor */}
         <div className="col-12 col-md-9 col-lg-10 d-flex flex-column p-0">
           <div className="bg-dark p-2 d-flex justify-content-end flex-wrap">
             <select
@@ -243,60 +260,54 @@ function EditorPage() {
       {/* Compile Button */}
       <button
         className="btn btn-primary position-fixed bottom-0 end-0 m-3"
-        onClick={toggleCompileWindow}
+        onClick={() => setIsCompileWindowOpen(!isCompileWindowOpen)}
         style={{ zIndex: 1050 }}
       >
         {isCompileWindowOpen ? "Close Compiler" : "Open Compiler"}
       </button>
 
       {/* Compiler Output */}
-      <div
-        className={`bg-black text-light ${isCompileWindowOpen ? "d-block" : "d-none"}`}
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: "30vh",
-          transition: "all 0.3s ease-in-out",
-          overflowY: "auto",
-          zIndex: 1040,
-          borderTop: "2px solid #00ffcc",
-        }}
-      >
-        <div className="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary">
-          <h5 className="m-0">Compiler Output ({selectedLanguage})</h5>
-          <div>
-            <button
-              className="btn btn-success btn-sm me-2"
-              onClick={runCode}
-              disabled={isCompiling}
-            >
-              {isCompiling ? "Compiling..." : "Run Code"}
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={toggleCompileWindow}>
-              Close
-            </button>
-          </div>
-        </div>
-        <pre
-          className="p-3 rounded"
+      {isCompileWindowOpen && (
+        <div
+          className="bg-black text-light"
           style={{
-            backgroundColor: "#121212",
-            color: "#00ff90",
-            fontFamily: "Fira Code, monospace",
-            fontSize: "14px",
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "30vh",
+            overflowY: "auto",
+            zIndex: 1040,
+            borderTop: "2px solid #00ffcc",
           }}
         >
-          {output || "// Output will appear here after compilation..."}
-        </pre>
-      </div>
+          <div className="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary">
+            <h5 className="m-0">Compiler Output ({selectedLanguage})</h5>
+            <div>
+              <button className="btn btn-success btn-sm me-2" onClick={runCode} disabled={isCompiling}>
+                {isCompiling ? "Compiling..." : "Run Code"}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setIsCompileWindowOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+          <pre
+            className="p-3 rounded"
+            style={{
+              backgroundColor: "#121212",
+              color: "#00ff90",
+              fontFamily: "Fira Code, monospace",
+              fontSize: "14px",
+            }}
+          >
+            {output || "// Output will appear here after compilation..."}
+          </pre>
+        </div>
+      )}
 
       {/* Bot Button */}
-      <div
-        className="position-fixed end-0 m-4"
-        style={{ bottom: "80px", zIndex: 1100 }}
-      >
+      <div className="position-fixed end-0 m-4" style={{ bottom: "80px", zIndex: 1100 }}>
         <img
           src="https://tse2.mm.bing.net/th/id/OIP.Xy3MEyqhqGeKjY5VznKpUgHaHa?pid=Api&P=0&h=220"
           alt="Bot"
